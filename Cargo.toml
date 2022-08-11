@@ -1,0 +1,24 @@
+[package]
+name = "tower-h3"
+version = "0.0.0"
+edition = "2021"
+
+publish = false
+
+[dependencies]
+bytes = "1.1.0"
+futures = "0.3"
+h3 = { git = "https://github.com/hyperium/h3" }
+h3-quinn = { git = "https://github.com/hyperium/h3" }
+http = "0.2.8"
+http-body = "0.4.5"
+tokio-util = "0.7"
+tower-service = "0.3.2"
+
+[dev-dependencies]
+h3-quinn = { git = "https://github.com/hyperium/h3" }
+rustls = "0.20"
+rustls-native-certs = "0.6"
+tokio = { version = "1.19.2", features = ["full"] }
+tracing-subscriber = { version = "0.3", default-features = false, features = ["fmt", "ansi", "env-filter", "time"] }
+quinn = { version = "0.8", default-features = false, features = ["tls-rustls", "ring"] }
