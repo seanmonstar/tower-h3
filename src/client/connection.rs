@@ -5,7 +5,7 @@ use bytes::{Buf, Bytes};
 use futures::future::Future;
 use h3::client::{RequestStream, SendRequest};
 use h3::quic;
-use http_body::Body;
+use http_body::{Body, Frame};
 use tokio_util::sync::ReusableBoxFuture;
 use tower_service::Service;
 
@@ -15,10 +15,6 @@ where
     B: Body,
 {
     tx: SendRequest<T, B::Data>,
-}
-
-pub struct RecvStream<T: quic::RecvStream, B> {
-    data_fut: ReusableBoxFuture<'static, (Option<Result<Bytes, h3::Error>>, RequestStream<T, B>)>,
 }
 
 impl<T, B> Connection<T, B>
@@ -60,11 +56,15 @@ where
             let mut stream = tx.send_request(req).await?;
             let resp = stream.recv_response().await?;
             let body = RecvStream {
-                data_fut: ReusableBoxFuture::new(make_data_fut(stream)),
+                fut: ReusableBoxFuture::new(make_fut(stream)),
             };
             Ok(resp.map(move |()| body))
         })
     }
+}
+
+pub struct RecvStream<T: quic::RecvStream, B> {
+    fut: ReusableBoxFuture<'static, (Option<Result<Frame<Bytes>, h3::Error>>, RequestStream<T, B>)>,
 }
 
 impl<T, B> Body for RecvStream<T, B>
@@ -75,37 +75,49 @@ where
     B: Send + 'static,
 {
     // TODO: fix buf type
-    type Data = bytes::Bytes;
+    type Data = Bytes;
     type Error = h3::Error;
 
-    fn poll_data(
+    fn poll_frame(
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
-    ) -> Poll<Option<Result<Self::Data, Self::Error>>> {
-        let (result, rx) = futures::ready!(self.data_fut.poll(cx));
-        self.data_fut.set(make_data_fut(rx));
+    ) -> Poll<Option<Result<Frame<Self::Data>, Self::Error>>> {
+        let (result, rx) = futures::ready!(self.fut.poll(cx));
+        self.fut.set(make_fut(rx));
         Poll::Ready(result)
-    }
-
-    fn poll_trailers(
-        self: Pin<&mut Self>,
-        _cx: &mut Context<'_>,
-    ) -> Poll<Result<Option<http::HeaderMap>, Self::Error>> {
-        todo!("poll_trailers");
     }
 }
 
-async fn make_data_fut<T, B>(
+impl<T, B> Future for RecvStream<T, B>
+where
+    T: quic::RecvStream,
+    T: Send + 'static,
+    B: Send + 'static,
+{
+    type Output = Option<Result<Frame<<Self as Body>::Data>, <Self as Body>::Error>>;
+
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        Poll::Ready(futures::ready!(self.poll_frame(cx)))
+    }
+}
+
+async fn make_fut<T, B>(
     mut rx: RequestStream<T, B>,
-) -> (Option<Result<Bytes, h3::Error>>, RequestStream<T, B>)
+) -> (Option<Result<Frame<Bytes>, h3::Error>>, RequestStream<T, B>)
 where
     T: quic::RecvStream,
 {
-    let result = rx.recv_data().await;
-    let ret = match result {
-        Ok(Some(mut buf)) => Some(Ok(buf.copy_to_bytes(buf.remaining()))),
-        Ok(None) => None,
+    let ret = match rx.recv_data().await {
         Err(e) => Some(Err(e)),
+
+        Ok(Some(mut buf)) => Some(Ok(Frame::data(buf.copy_to_bytes(buf.remaining())))),
+
+        Ok(None) => match rx.recv_trailers().await {
+            Err(e) => Some(Err(e)),
+            Ok(Some(trailers)) => Some(Ok(Frame::trailers(trailers))),
+            Ok(None) => None,
+        },
     };
+
     (ret, rx)
 }

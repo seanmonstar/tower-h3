@@ -11,7 +11,8 @@ futures = "0.3"
 h3 = { git = "https://github.com/hyperium/h3" }
 h3-quinn = { git = "https://github.com/hyperium/h3" }
 http = "0.2.8"
-http-body = "0.4.5"
+http-body = { git = "https://github.com/hyperium/http-body" }
+http-body-util = { git = "https://github.com/hyperium/http-body" }
 tokio-util = "0.7"
 tower-service = "0.3.2"
 

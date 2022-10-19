@@ -5,7 +5,6 @@ use std::sync::Arc;
 use std::task::{Context, Poll};
 
 use futures::future::{self, Future};
-use http_body::Body;
 use tokio::io::AsyncWriteExt;
 use tower_h3::client::Endpoint;
 use tower_service::Service;
@@ -78,7 +77,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let conn = Connect::new(quinn_endpoint.clone());
 
     // TODO make type inference work and remove this
-    let mut endpoint: Endpoint<Connect, http_body::Empty<bytes::Bytes>> = Endpoint::new(conn);
+    let mut endpoint: Endpoint<Connect, http_body_util::Empty<bytes::Bytes>> = Endpoint::new(conn);
     let (mut driver, mut service) = endpoint.call((addr, auth.host())).await?;
 
     eprintln!("QUIC connected ...");
@@ -92,7 +91,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     eprintln!("Sending request ...");
     let req = http::Request::builder()
         .uri(dest)
-        .body(http_body::Empty::new())?;
+        .body(http_body_util::Empty::new())?;
 
     let mut resp = service.call(req).await?;
 
@@ -101,11 +100,13 @@ async fn main() -> Result<(), Box<dyn Error>> {
     eprintln!("Response: {:?} {}", resp.version(), resp.status());
     eprintln!("Headers: {:#?}", resp.headers());
 
-    while let Some(next) = resp.body_mut().data().await {
-        let mut chunk = next?;
-        let mut out = tokio::io::stdout();
-        out.write_all_buf(&mut chunk).await.expect("write_all");
-        out.flush().await.expect("flush");
+    while let Some(Ok(frame)) = Pin::new(resp.body_mut()).await {
+        if frame.is_data() {
+            let mut data = frame.into_data().unwrap();
+            let mut out = tokio::io::stdout();
+            out.write_all_buf(&mut data).await.expect("write_all");
+            out.flush().await.expect("flush");
+        }
     }
 
     drop(service);
