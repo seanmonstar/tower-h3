@@ -6,8 +6,8 @@ use std::task::{Context, Poll};
 
 use futures::future::{self, Future};
 use tokio::io::AsyncWriteExt;
+use tower::Service;
 use tower_h3::client::Endpoint;
-use tower_service::Service;
 
 static ALPN: &[u8] = b"h3";
 

@@ -14,7 +14,7 @@ http = "0.2.8"
 http-body = { git = "https://github.com/hyperium/http-body" }
 http-body-util = { git = "https://github.com/hyperium/http-body" }
 tokio-util = "0.7"
-tower-service = "0.3.2"
+tower = { version = "0.4.13", features = ["make", "util"] }
 
 [dev-dependencies]
 quinn = { version = "0.8", default-features = false, features = ["tls-rustls", "ring"] }

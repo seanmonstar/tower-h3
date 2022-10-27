@@ -7,7 +7,7 @@ use h3::client::{RequestStream, SendRequest};
 use h3::quic;
 use http_body::{Body, Frame};
 use tokio_util::sync::ReusableBoxFuture;
-use tower_service::Service;
+use tower::Service;
 
 pub struct Connection<T, B>
 where
