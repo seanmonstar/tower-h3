@@ -5,7 +5,7 @@ use std::task::{Context, Poll};
 use futures::future::Future;
 use h3::quic;
 use http_body::Body;
-use tower_service::Service;
+use tower::Service;
 
 pub struct Endpoint<C, B> {
     inner: C,
